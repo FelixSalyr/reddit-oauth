@@ -42,7 +42,7 @@ if (cluster.isMaster) {
     var ddbTable =  process.env.STARTUP_SIGNUP_TABLE;
     var snsTopic =  process.env.NEW_SIGNUP_TOPIC;
     const hostname = '127.0.0.1';
-    const port = 3000;
+    const port = process.env.PORT || 3000;
 
     var REDDIT_CONSUMER_KEY = "--insert-reddit-consumer-key-here--";
     var REDDIT_CONSUMER_SECRET = "--insert-reddit-consumer-secret-here--";
@@ -88,21 +88,13 @@ if (cluster.isMaster) {
     var app = express();
 
     // configure Express
-    app.configure(function() {
-        app.set('views', __dirname + '/views');
-        app.set('view engine', 'ejs');
-        app.use(express.logger());
-        app.use(express.cookieParser());
-        app.use(express.bodyParser());
-        app.use(express.methodOverride());
-        app.use(express.session({ secret: 'keyboard cat' }));
-        // Initialize Passport!  Also use passport.session() middleware, to support
-        // persistent login sessions (recommended).
-        app.use(passport.initialize());
-        app.use(passport.session());
-        app.use(app.router);
-        app.use(express.static(__dirname + '/public'));
-    });
+
+    app.set('views', __dirname + '/views');
+    app.set('view engine', 'ejs');
+    // Initialize Passport!  Also use passport.session() middleware, to support
+    // persistent login sessions (recommended).
+    app.use(passport.initialize());
+    app.use(passport.session());
 
     app.get('/', function(req, res){
         res.render('index', { user: req.user });
@@ -152,8 +144,6 @@ if (cluster.isMaster) {
         req.logout();
         res.redirect('/');
     });
-
-    var port = process.env.PORT || 3000;
 
     var server = app.listen(port, function () {
         console.log('Server running at http://127.0.0.1:' + port + '/');
