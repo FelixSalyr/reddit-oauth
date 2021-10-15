@@ -1,12 +1,7 @@
 // Cobbled together using Passport's Reddit oAuth2 example
 // https://github.com/Slotos/passport-reddit/tree/master/examples/login
 // and with AWS' Elastic Beanstalk demo project
-var cluster = require('cluster'),
-    express = require('express'),
-    passport = require('passport'),
-    util = require('util'),
-    crypto = require('crypto'),
-    RedditStrategy = require('passport-reddit').Strategy;
+var cluster = require('cluster');
 
 // Code to run if we're in the master process
 if (cluster.isMaster) {
@@ -30,9 +25,15 @@ if (cluster.isMaster) {
 
 // Code to run if we're in a worker process
 } else {
-    var AWS = require('aws-sdk');
-    var express = require('express');
-    var bodyParser = require('body-parser');
+    var AWS = require('aws-sdk'),
+        express = require('express'),
+        bodyParser = require('body-parser'),
+        passport = require('passport'),
+        util = require('util'),
+        crypto = require('crypto'),
+        session = require('express-session'),
+        expressLayouts = require('express-ejs-layouts'),
+        RedditStrategy = require('passport-reddit').Strategy;
 
     AWS.config.region = process.env.REGION
 
@@ -41,7 +42,7 @@ if (cluster.isMaster) {
 
     var ddbTable =  process.env.STARTUP_SIGNUP_TABLE;
     var snsTopic =  process.env.NEW_SIGNUP_TOPIC;
-    const hostname = '127.0.0.1';
+    const hostname = 'localhost'; 
     const port = process.env.PORT || 3000;
 
     var REDDIT_CONSUMER_KEY = "--insert-reddit-consumer-key-here--";
@@ -70,7 +71,7 @@ if (cluster.isMaster) {
     passport.use(new RedditStrategy({
         clientID: REDDIT_CONSUMER_KEY,
         clientSecret: REDDIT_CONSUMER_SECRET,
-        callbackURL: "http://127.0.0.1:3000/auth/reddit/callback"
+        callbackURL: `http://${hostname}:${port}/auth/reddit/callback`
     },
     function(accessToken, refreshToken, profile, done) {
         // asynchronous verification, for effect...
@@ -88,14 +89,24 @@ if (cluster.isMaster) {
     var app = express();
 
     // configure Express
-
+    app.use(express.json());
+    app.use(session({
+        secret: "Dexter's Secret",
+        resave: false,
+        saveUninitialized: true,
+        cookie: { secure: true }
+    }));
+    // Set Templating Engine
+    app.use(expressLayouts);
     app.set('views', __dirname + '/views');
-    app.set('view engine', 'ejs');
+    app.set('layout', './layouts/layout');
+    app.set('view engine', 'ejs')
     // Initialize Passport!  Also use passport.session() middleware, to support
     // persistent login sessions (recommended).
     app.use(passport.initialize());
     app.use(passport.session());
 
+    // Routes
     app.get('/', function(req, res){
         res.render('index', { user: req.user });
     });
@@ -146,7 +157,7 @@ if (cluster.isMaster) {
     });
 
     var server = app.listen(port, function () {
-        console.log('Server running at http://127.0.0.1:' + port + '/');
+        console.log(`Server running at http://${hostname}:${port}/`);
     });
 
     // Simple route middleware to ensure user is authenticated.
