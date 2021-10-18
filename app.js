@@ -1,6 +1,7 @@
 // Cobbled together using Passport's Reddit oAuth2 example
 // https://github.com/Slotos/passport-reddit/tree/master/examples/login
 // and with AWS' Elastic Beanstalk demo project
+// and https://medium.com/free-code-camp/how-to-set-up-twitter-oauth-using-passport-js-and-reactjs-9ffa6f49ef0
 var cluster = require('cluster');
 
 // Code to run if we're in the master process
@@ -33,7 +34,12 @@ if (cluster.isMaster) {
         crypto = require('crypto'),
         session = require('express-session'),
         expressLayouts = require('express-ejs-layouts'),
-        RedditStrategy = require('passport-reddit').Strategy;
+        RedditStrategy = require('passport-reddit').Strategy,
+        authRoutes = require('./auth-routes');
+        const KEYS = require('./keys');
+        const passportSetup = require ("./boot/auth");
+        const cookieSession = require("cookie-session");
+        const cookieParser = require("cookie-parser");
 
     AWS.config.region = process.env.REGION
 
@@ -45,57 +51,20 @@ if (cluster.isMaster) {
     const hostname = 'localhost'; 
     const port = process.env.PORT || 3000;
 
-    var REDDIT_CONSUMER_KEY = "--insert-reddit-consumer-key-here--";
-    var REDDIT_CONSUMER_SECRET = "--insert-reddit-consumer-secret-here--";
-    
-    // Passport session setup.
-    //   To support persistent login sessions, Passport needs to be able to
-    //   serialize users into and deserialize users out of the session.  Typically,
-    //   this will be as simple as storing the user ID when serializing, and finding
-    //   the user by ID when deserializing.  However, since this example does not
-    //   have a database of user records, the complete Reddit profile is
-    //   serialized and deserialized.
-    passport.serializeUser(function(user, done) {
-        done(null, user);
-    });
-  
-    passport.deserializeUser(function(obj, done) {
-        done(null, obj);
-    });
-
-    // Use the RedditStrategy within Passport.
-    //   Strategies in Passport require a `verify` function, which accept
-    //   credentials (in this case, an accessToken, refreshToken, and Reddit
-    //   profile), and invoke a callback with a user object.
-    //   callbackURL must match redirect uri from your app settings
-    passport.use(new RedditStrategy({
-        clientID: REDDIT_CONSUMER_KEY,
-        clientSecret: REDDIT_CONSUMER_SECRET,
-        callbackURL: `http://${hostname}:${port}/auth/reddit/callback`
-    },
-    function(accessToken, refreshToken, profile, done) {
-        // asynchronous verification, for effect...
-        process.nextTick(function () {
-
-            // To keep the example simple, the user's Reddit profile is returned to
-            // represent the logged-in user.  In a typical application, you would want
-            // to associate the Reddit account with a user record in your database,
-            // and return that user instead.
-            return done(null, profile);
-        });
-    }
-    ));
+    var REDDIT_CONSUMER_KEY = "HpZvczyMWy9y_nRvsUpVBQ";
+    var REDDIT_CONSUMER_SECRET = "IYSuPWHgKnl9CgwQCNLCEWO29x_cwA";
 
     var app = express();
 
     // configure Express
     app.use(express.json());
-    app.use(session({
-        secret: "Dexter's Secret",
-        resave: false,
-        saveUninitialized: true,
-        cookie: { secure: true }
-    }));
+    // Session storage in a cookie
+    app.use(cookieSession({
+        name: "session",
+        keys: [KEYS.COOKIE_KEY],
+        maxAge: 24 * 60 * 60 * 100 // 24 hours in ms
+    }))
+    app.use(cookieParser());
     // Set Templating Engine
     app.use(expressLayouts);
     app.set('views', __dirname + '/views');
@@ -106,7 +75,7 @@ if (cluster.isMaster) {
     app.use(passport.initialize());
     app.use(passport.session());
 
-    // Routes
+    // Test Routes (To be removed)
     app.get('/', function(req, res){
         res.render('index', { user: req.user });
     });
@@ -118,57 +87,12 @@ if (cluster.isMaster) {
     app.get('/login', function(req, res){
         res.render('login', { user: req.user });
     });
-
-    // GET /auth/reddit
-    //   Use passport.authenticate() as route middleware to authenticate the
-    //   request.  The first step in Reddit authentication will involve
-    //   redirecting the user to reddit.com.  After authorization, Reddit
-    //   will redirect the user back to this application at /auth/reddit/callback
-    //
-    //   Note that the 'state' option is a Reddit-specific requirement.
-    app.get('/auth/reddit', function(req, res, next){
-        req.session.state = crypto.randomBytes(32).toString('hex');
-        passport.authenticate('reddit', {
-                state: req.session.state,
-            })(req, res, next);
-    });
-
-    // GET /auth/reddit/callback
-    //   Use passport.authenticate() as route middleware to authenticate the
-    //   request.  If authentication fails, the user will be redirected back to the
-    //   login page.  Otherwise, the primary route function function will be called,
-    //   which, in this example, will redirect the user to the home page.
-    app.get('/auth/reddit/callback', function(req, res, next){
-        // Check for origin via state token
-        if (req.query.state == req.session.state){
-            passport.authenticate('reddit', {
-                successRedirect: '/',
-                failureRedirect: '/login'
-            })(req, res, next);
-        }
-        else {
-            next( new Error(403) );
-        }
-    });
-
-    app.get('/logout', function(req, res){
-        req.logout();
-        res.redirect('/');
-    });
+    
+    app.use('/auth', authRoutes);
 
     var server = app.listen(port, function () {
         console.log(`Server running at http://${hostname}:${port}/`);
     });
-
-    // Simple route middleware to ensure user is authenticated.
-    //   Use this route middleware on any resource that needs to be protected.  If
-    //   the request is authenticated (typically via a persistent login session),
-    //   the request will proceed.  Otherwise, the user will be redirected to the
-    //   login page.
-    function ensureAuthenticated(req, res, next) {
-        if (req.isAuthenticated()) { return next(); }
-        res.redirect('/login');
-    }
 }
 
 
