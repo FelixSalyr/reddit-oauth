@@ -1,8 +1,8 @@
 var passport = require('passport');
 const RedditStrategy = require('passport-reddit').Strategy;
 const KEYS = require("../keys");
-//const User = require("../models/user-model");
 
+module.exports = function() {
     // Passport session setup.
     //   To support persistent login sessions, Passport needs to be able to
     //   serialize users into and deserialize users out of the session.  Typically,
@@ -25,22 +25,27 @@ const KEYS = require("../keys");
     passport.use(new RedditStrategy({
         clientID: KEYS.REDDIT_CONSUMER_KEY,
         clientSecret: KEYS.REDDIT_CONSUMER_SECRET,
-        callbackURL: `http://${KEYS.ENV_DEV_HOSTNAME}:${KEYS.ENV_PORT}/auth/reddit/redirect`
+        callbackURL: `http://${KEYS.ENV_DEV_HOSTNAME}:${KEYS.ENV_PORT}/auth/reddit/redirect`,
+        passReqToCallback: true
     },
-    function(accessToken, refreshToken, profile, done) {
-        // asynchronous verification, for effect...
-        process.nextTick(function () {
-            var user = {
-                "accessToken": accessToken,
-                "refreshToken": refreshToken,
-                "profileId": profile.id,
-                "name": profile.name
-            }
-            // To keep the example simple, the user's Reddit profile is returned to
-            // represent the logged-in user.  In a typical application, you would want
-            // to associate the Reddit account with a user record in your database,
-            // and return that user instead.
-            return done(null, user);
-        });
-    }
+        function(req, accessToken, refreshToken, profile, done) {
+            // asynchronous verification, for effect...
+            process.nextTick(function () {
+
+                var user = {
+                    "access_token": accessToken,
+                    "profileId": profile.id,
+                    "name": profile.name
+                }
+
+                // To keep the example simple, a pared down user Reddit profile is returned to
+                // represent the logged-in user.  In a typical application, you would want
+                // to associate the Reddit account with a user record in your database,
+                // and return that user instead.
+                return done(null, user);
+            });
+        }
     ));
+}
+
+    

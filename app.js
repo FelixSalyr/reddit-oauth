@@ -28,18 +28,15 @@ if (cluster.isMaster) {
 } else {
     var AWS = require('aws-sdk'),
         express = require('express'),
-        bodyParser = require('body-parser'),
         passport = require('passport'),
-        util = require('util'),
-        crypto = require('crypto'),
-        session = require('express-session'),
         expressLayouts = require('express-ejs-layouts'),
-        RedditStrategy = require('passport-reddit').Strategy,
         authRoutes = require('./auth-routes');
+        historyRoutes = require('./reddit/history-routes');
         const KEYS = require('./keys');
-        const passportSetup = require ("./boot/auth");
+        const cors = require('cors');
         const cookieSession = require("cookie-session");
         const cookieParser = require("cookie-parser");
+        const ensureAuthenticated = require('./utils/ensureAuthenticated');
 
     AWS.config.region = process.env.REGION
 
@@ -49,12 +46,12 @@ if (cluster.isMaster) {
     var ddbTable =  process.env.STARTUP_SIGNUP_TABLE;
     var snsTopic =  process.env.NEW_SIGNUP_TOPIC;
     const hostname = 'localhost'; 
-    const port = process.env.PORT || 3000;
-
-    var REDDIT_CONSUMER_KEY = "HpZvczyMWy9y_nRvsUpVBQ";
-    var REDDIT_CONSUMER_SECRET = "IYSuPWHgKnl9CgwQCNLCEWO29x_cwA";
+    const port = process.env.PORT || KEYS.ENV_PORT;
 
     var app = express();
+
+    // Run boot setup files
+    require('./boot/auth')();
 
     // configure Express
     app.use(express.json());
@@ -65,6 +62,14 @@ if (cluster.isMaster) {
         maxAge: 24 * 60 * 60 * 100 // 24 hours in ms
     }))
     app.use(cookieParser());
+    // set up cors to allow us to accept requests from our client
+    app.use(
+        cors({
+        origin: `http://${KEYS.REACT_APP_HOSTNAME}:${KEYS.REACT_APP_PORT}`, // allow to server to accept request from different origin
+        methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+        credentials: true // allow session cookie from browser to pass through
+        })
+    );
     // Set Templating Engine
     app.use(expressLayouts);
     app.set('views', __dirname + '/views');
@@ -87,8 +92,14 @@ if (cluster.isMaster) {
     app.get('/login', function(req, res){
         res.render('login', { user: req.user });
     });
+
+    app.get('/logout', function(req, res, next) {
+        req.logout();
+        res.redirect('/');
+    });
     
     app.use('/auth', authRoutes);
+    app.use('/history', historyRoutes);
 
     var server = app.listen(port, function () {
         console.log(`Server running at http://${hostname}:${port}/`);
